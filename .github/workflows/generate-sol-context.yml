@@ -73,15 +73,13 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Run Forge build
-        run: forge build --sizes
-
       - name: Install Node deps (if package.json exists)
         run: |
           cd ${{ steps.clone.outputs.repo_dir }}
           if [ -f package.json ]; then
             npm ci || npm install
           fi
+          forge build --sizes
         shell: bash
 
       - name: Run sol-context generator
