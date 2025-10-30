@@ -40,7 +40,7 @@ jobs:
           BRANCH="${{ github.event.inputs.branch }}"
           TARGET_DIR="work/target_repo"
           echo "Cloning ${REPO} branch ${BRANCH}..."
-          git clone --depth 1 --branch "$BRANCH" \
+          git clone --branch "$BRANCH" \
             "https://x-access-token:${{ secrets.PAT }}@github.com/${REPO}.git" "$TARGET_DIR"
           cd "$TARGET_DIR"
           COMMIT_HASH=$(git rev-parse --short HEAD)
@@ -72,6 +72,9 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Run Forge build
+        run: forge build --sizes
 
       - name: Install Node deps (if package.json exists)
         run: |
