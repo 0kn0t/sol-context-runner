@@ -84,7 +84,7 @@ jobs:
       - name: Run sol-context generator
         run: |
           cd ${{ steps.clone.outputs.repo_dir }}
-          npx --yes sol-context
+          npx --yes sol-context@latest
         shell: bash
 
       - name: Package and copy outputs
