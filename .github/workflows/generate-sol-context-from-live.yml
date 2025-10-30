@@ -1,0 +1,108 @@
+name: Generate sol-context from live deployed contract
+
+on:
+  workflow_dispatch:
+    inputs:
+      address:
+        description: "Contract address (0x...)"
+        required: true
+      chain:
+        description: "Chain name (e.g. mainnet, optimism, base)"
+        required: true
+      etherscan_api_key:
+        description: "Etherscan API key"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  generate-live:
+    runs-on: ubuntu-latest
+    env:
+      OUTPUT_ROOT: live
+
+    steps:
+      - name: Checkout runner repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT }}
+          persist-credentials: true
+          path: runner
+
+      - name: Prepare workspace
+        run: mkdir -p work && cd work
+        shell: bash
+
+      - name: Skip if already generated
+        id: check-existing
+        run: |
+          CHAIN="${{ github.event.inputs.chain }}"
+          ADDR="${{ github.event.inputs.address }}"
+          OUT_DIR="runner/${OUTPUT_ROOT}/${CHAIN}/${ADDR}"
+          TARFILE="${OUT_DIR}.tar.gz"
+          if [ -d "$OUT_DIR" ] || [ -f "$TARFILE" ]; then
+            echo "Output for ${CHAIN}/${ADDR} already exists. Skipping."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
+      - name: Stop if already generated
+        if: steps.check-existing.outputs.skip == 'true'
+        run: |
+          echo "Already generated. Skipping run."
+          exit 0
+        shell: bash
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Clone live contract
+        run: |
+          cd work
+          ADDR="${{ github.event.inputs.address }}"
+          CHAIN="${{ github.event.inputs.chain }}"
+          KEY="${{ github.event.inputs.etherscan_api_key }}"
+          echo "Cloning contract $ADDR from $CHAIN using forge..."
+          forge clone "$ADDR" . -c "$CHAIN" -e "$KEY"
+        shell: bash
+
+      - name: Run sol-context generator
+        run: |
+          cd work
+          npx --yes sol-context
+        shell: bash
+
+      - name: Copy and compress outputs
+        run: |
+          set -e
+          ADDR="${{ github.event.inputs.address }}"
+          CHAIN="${{ github.event.inputs.chain }}"
+          SRC="work/context_output"
+          DEST="runner/${OUTPUT_ROOT}/${CHAIN}/${ADDR}"
+          TARFILE="${DEST}.tar.gz"
+
+          mkdir -p "$DEST"
+          if [ -d "$SRC" ]; then
+            cp -r "$SRC"/. "$DEST"/
+            tar -czf "$TARFILE" -C "runner/${OUTPUT_ROOT}/${CHAIN}" "$ADDR"
+          else
+            echo "No context_output found, creating placeholder."
+            mkdir -p "$DEST"
+            echo "{}" > "$DEST/empty.txt"
+            tar -czf "$TARFILE" -C "runner/${OUTPUT_ROOT}/${CHAIN}" "$ADDR"
+          fi
+        shell: bash
+
+      - name: Commit and push new results
+        run: |
+          set -e
+          cd runner
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ${OUTPUT_ROOT}
+          git commit -m "chore: add live sol-context for ${{ github.event.inputs.chain }}/${{ github.event.inputs.address }}" || echo "No changes to commit"
+          git push
+        shell: bash
