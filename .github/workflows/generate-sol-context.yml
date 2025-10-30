@@ -40,24 +40,29 @@ jobs:
           REF="${{ github.event.inputs.ref }}"
           TARGET_DIR="work/target_repo"
 
-          echo "Cloning ${REPO} (ref: ${REF})..."
+          echo "🔹 Cloning ${REPO} (ref: ${REF})..."
           git clone "https://x-access-token:${{ secrets.PAT }}@github.com/${REPO}.git" "$TARGET_DIR"
 
           cd "$TARGET_DIR"
 
-          # Attempt to checkout ref (works for branch, tag, or commit)
-          if git rev-parse --verify "$REF" >/dev/null 2>&1; then
+          echo "🔹 Fetching target ref..."
+          # Fetch everything to ensure commit/tag exists
+          git fetch origin "$REF" --tags --prune || git fetch --all --tags --prune
+
+          echo "🔹 Checking out ${REF}..."
+          if git cat-file -e "$REF^{commit}" 2>/dev/null; then
             git checkout "$REF"
-          elif git show-ref --verify "refs/remotes/origin/$REF" >/dev/null 2>&1; then
-            git checkout "$REF"
+          elif git rev-parse --verify "origin/${REF}" >/dev/null 2>&1; then
+            git checkout "origin/${REF}"
+          elif git rev-parse --verify "refs/tags/${REF}" >/dev/null 2>&1; then
+            git checkout "refs/tags/${REF}"
           else
-            echo "Trying to fetch ${REF}..."
-            git fetch origin "$REF" || echo "Fetch failed, maybe already present."
-            git checkout "$REF" || (echo "❌ Invalid ref: ${REF}" && exit 1)
+            echo "❌ Could not find ref '${REF}' in ${REPO}"
+            exit 1
           fi
 
           COMMIT_HASH=$(git rev-parse --short HEAD)
-          echo "Checked out commit: $COMMIT_HASH"
+          echo "✅ Checked out commit: $COMMIT_HASH"
 
           echo "repo_dir=$TARGET_DIR" >> $GITHUB_OUTPUT
           echo "commit=$COMMIT_HASH" >> $GITHUB_OUTPUT
