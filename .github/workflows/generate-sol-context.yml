@@ -79,7 +79,6 @@ jobs:
           if [ -f package.json ]; then
             npm ci || npm install
           fi
-          forge build --sizes
         shell: bash
 
       - name: Run sol-context generator
